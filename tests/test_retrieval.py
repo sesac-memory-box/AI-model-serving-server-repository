@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from services.retrieval import RetrievedDocument, build_context, points_to_documents
+from services.retrieval import RetrievedDocument, build_context, extract_content, points_to_documents
 
 
 def test_payload_without_content_is_excluded_from_context():
@@ -16,6 +16,18 @@ def test_payload_without_content_is_excluded_from_context():
     )
 
     assert context == ""
+
+
+def test_payload_content_key_priority():
+    payload = {
+        "body": "body 값",
+        "chunk": "chunk 값",
+        "text": "text 값",
+        "content_text": "content_text 값",
+        "content": "content 값",
+    }
+
+    assert extract_content(payload) == "content 값"
 
 
 def test_context_formatting_uses_content_key_priority():
