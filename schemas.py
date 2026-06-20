@@ -1,9 +1,10 @@
-from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
+
+from pydantic import BaseModel, field_validator
 
 
 class Message(BaseModel):
-    role: str
+    role: Literal["user", "assistant"]
     content: str
 
 
@@ -34,4 +35,11 @@ class STTResponse(BaseModel):
 
 class TTSRequest(BaseModel):
     text: str
-    voice: str = "alloy" 
+    voice: Literal["alloy", "echo", "fable", "onyx", "nova", "shimmer"] = "alloy"
+
+    @field_validator("text")
+    @classmethod
+    def text_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("text must not be blank")
+        return value

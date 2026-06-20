@@ -1,7 +1,8 @@
 import asyncio
+from types import SimpleNamespace
 
 from routers import chat as chat_router
-from schemas import ChatRequest
+from schemas import ChatRequest, Message, SummaryRequest
 
 
 def test_chat_returns_fallback_without_openai_when_search_result_is_empty(monkeypatch):
@@ -46,3 +47,30 @@ def test_chat_returns_fallback_without_openai_when_context_is_empty(monkeypatch)
 
     assert response.answer == chat_router.NO_CONTEXT_ANSWER
     assert response.summary is None
+
+
+def test_chat_summary_returns_fallback_when_openai_json_is_invalid(monkeypatch):
+    class FakeCompletions:
+        async def create(self, **kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content="not json")
+                    )
+                ]
+            )
+
+    class FakeClient:
+        chat = SimpleNamespace(completions=FakeCompletions())
+
+    monkeypatch.setattr(chat_router, "get_openai_client", lambda: FakeClient())
+
+    response = asyncio.run(
+        chat_router.session_summary(
+            SummaryRequest(messages=[Message(role="user", content="한강 공원에 갔어요")])
+        )
+    )
+
+    assert response.places == []
+    assert response.people == []
+    assert response.next_topics == ["최근 기억", "가족 이야기", "추억 회상"]

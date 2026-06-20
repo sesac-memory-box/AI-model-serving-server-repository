@@ -1,4 +1,7 @@
-from schemas import ChatRequest, Message, SummaryResponse
+import pytest
+from pydantic import ValidationError
+
+from schemas import ChatRequest, Message, SummaryRequest, SummaryResponse, TTSRequest
 
 
 def test_chat_request_schema_accepts_optional_history():
@@ -31,3 +34,27 @@ def test_summary_response_schema():
     assert response.places == ["한강 공원"]
     assert response.people == ["민준"]
     assert len(response.next_topics) == 3
+
+
+def test_summary_request_schema():
+    request = SummaryRequest(
+        messages=[
+            Message(role="user", content="어제 한강 공원에 갔어요"),
+            Message(role="assistant", content="좋은 기억이네요."),
+        ]
+    )
+
+    assert len(request.messages) == 2
+    assert request.messages[0].role == "user"
+
+
+def test_tts_request_voice_validation():
+    request = TTSRequest(text="안녕하세요", voice="alloy")
+
+    assert request.voice == "alloy"
+
+    with pytest.raises(ValidationError):
+        TTSRequest(text="안녕하세요", voice="invalid")
+
+    with pytest.raises(ValidationError):
+        TTSRequest(text="   ", voice="alloy")
