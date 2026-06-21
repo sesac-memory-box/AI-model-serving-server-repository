@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+speech.mp3
+*.mp3
+*.wav
+*.m4a
+*:Zone.Identifier*
+.git/
+.gitignore
+tests/__pycache__/
