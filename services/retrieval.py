@@ -1,10 +1,11 @@
-import asyncio
+import logging
 import os
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
 CONTENT_KEYS = ("content", "content_text", "text", "chunk", "body")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -44,7 +45,7 @@ def _qdrant_client():
 
     api_key = os.getenv("QDRANT_API_KEY") or None
     return AsyncQdrantClient(
-        url=os.getenv("QDRANT_URL", "http://localhost:6333"),
+        url=os.getenv("QDRANT_URL"),
         api_key=api_key,
     )
 
@@ -57,44 +58,66 @@ def _embed_query(query: str) -> list[float]:
 
 
 async def retrieve(query: str, top_k: int | None = None) -> list[RetrievedDocument]:
-    vector = await asyncio.to_thread(_embed_query, query)
-    if not vector:
+    qdrant_url = os.getenv("QDRANT_URL")
+    if not qdrant_url:
+        logger.warning("Qdrant unavailable. Falling back to empty retrieval.")
         return []
 
-    limit = top_k or _env_int("RAG_TOP_K", 5)
-    score_threshold = _env_float("RAG_SCORE_THRESHOLD", 0.75)
-    collection = os.getenv("QDRANT_COLLECTION", "memory_box_contents")
-    client = _qdrant_client()
+    try:
+        vector = _embed_query(query)
+        if not vector:
+            return []
 
-    if hasattr(client, "query_points"):
-        result = await client.query_points(
-            collection_name=collection,
-            query=vector,
-            limit=limit,
-            with_payload=True,
-        )
-        points = result.points
-    else:
-        points = await client.search(
-            collection_name=collection,
-            query_vector=vector,
-            limit=limit,
-            with_payload=True,
-        )
+        limit = top_k or _env_int("RAG_TOP_K", 5)
+        score_threshold = _env_float("RAG_SCORE_THRESHOLD", 0.75)
+        collection = os.getenv("QDRANT_COLLECTION", "memory_box_contents")
+        client = _qdrant_client()
 
-    return points_to_documents(points, score_threshold)
+        if hasattr(client, "query_points"):
+            result = await client.query_points(
+                collection_name=collection,
+                query=vector,
+                limit=limit,
+                with_payload=True,
+            )
+            points = result.points
+        else:
+            points = await client.search(
+                collection_name=collection,
+                query_vector=vector,
+                limit=limit,
+                with_payload=True,
+            )
+
+        return points_to_documents(points, score_threshold)
+    except Exception as error:
+        logger.warning(
+            "Qdrant unavailable. Falling back to empty retrieval. error=%s: %s",
+            type(error).__name__,
+            error,
+        )
+        return []
 
 
 def points_to_documents(points: list[Any], score_threshold: float) -> list[RetrievedDocument]:
     documents = []
     for point in points:
-        payload = point.payload or {}
-        score = getattr(point, "score", None)
-        if not payload:
-            continue
-        if score is not None and score < score_threshold:
-            continue
-        documents.append(RetrievedDocument(payload=payload, score=score))
+        try:
+            payload = getattr(point, "payload", None) or {}
+            score = getattr(point, "score", None)
+            if not isinstance(payload, dict):
+                continue
+            if not payload:
+                continue
+            if score is not None and score < score_threshold:
+                continue
+            documents.append(RetrievedDocument(payload=payload, score=score))
+        except Exception as error:
+            logger.warning(
+                "Failed to parse Qdrant payload. Skipping point. error=%s: %s",
+                type(error).__name__,
+                error,
+            )
 
     return documents
 

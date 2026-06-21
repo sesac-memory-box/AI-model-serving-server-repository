@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 
 from fastapi import APIRouter
@@ -7,6 +8,7 @@ from openai_client import get_openai_client, get_openai_model, raise_openai_http
 from services.retrieval import build_context, retrieve
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 NO_CONTEXT_ANSWER = "현재 저장된 자료에서 관련 내용을 찾지 못했습니다. 다른 키워드로 질문해 주세요."
 SUMMARY_FALLBACK = SummaryResponse(
@@ -51,11 +53,29 @@ async def _generate_summary(messages: list, previous_summary: str | None = None)
 
 @router.post("/", response_model=ChatResponse)
 async def chat(request: ChatRequest):
-    documents = await retrieve(request.query)
+    try:
+        documents = await retrieve(request.query)
+    except Exception as error:
+        logger.warning(
+            "Qdrant unavailable. Falling back to empty retrieval. error=%s: %s",
+            type(error).__name__,
+            error,
+        )
+        documents = []
+
     if not documents:
         return ChatResponse(answer=NO_CONTEXT_ANSWER, summary=None)
 
-    context = build_context(documents)
+    try:
+        context = build_context(documents)
+    except Exception as error:
+        logger.warning(
+            "Failed to build RAG context. Falling back to no context. error=%s: %s",
+            type(error).__name__,
+            error,
+        )
+        context = ""
+
     if not context.strip():
         return ChatResponse(answer=NO_CONTEXT_ANSWER, summary=None)
 
