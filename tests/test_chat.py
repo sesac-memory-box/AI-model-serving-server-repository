@@ -25,6 +25,26 @@ def test_chat_returns_fallback_without_openai_when_search_result_is_empty(monkey
     assert response.summary is None
 
 
+def test_chat_returns_fallback_without_openai_when_retrieval_fails(monkeypatch):
+    async def fake_retrieve(query):
+        raise ConnectionError("All connection attempts failed")
+
+    def fail_openai_call():
+        raise AssertionError("OpenAI must not be called when retrieval fails")
+
+    monkeypatch.setattr(chat_router, "retrieve", fake_retrieve)
+    monkeypatch.setattr(chat_router, "get_openai_client", fail_openai_call)
+
+    response = asyncio.run(
+        chat_router.chat(
+            ChatRequest(query="서울역", messages=[], summary=None)
+        )
+    )
+
+    assert response.answer == chat_router.NO_CONTEXT_ANSWER
+    assert response.summary is None
+
+
 def test_chat_returns_fallback_without_openai_when_context_is_empty(monkeypatch):
     async def fake_retrieve(query):
         return [object()]

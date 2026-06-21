@@ -3,12 +3,14 @@
 !.env.example
 .venv/
 __pycache__/
+**/__pycache__/
 .pytest_cache/
 *.pyc
 speech.mp3
 *.mp3
 *.wav
 *.m4a
+qdrant_storage/
 *:Zone.Identifier*
 .git/
 .gitignore
