@@ -21,10 +21,10 @@ def _env_int(name: str, default: int) -> int:
     return int(value)
 
 
-def _env_float(name: str, default: float) -> float:
+def _env_optional_float(name: str) -> float | None:
     value = os.getenv(name)
     if value is None or value == "":
-        return default
+        return None
     return float(value)
 
 
@@ -60,16 +60,18 @@ def _embed_query(query: str) -> list[float]:
 async def retrieve(query: str, top_k: int | None = None) -> list[RetrievedDocument]:
     qdrant_url = os.getenv("QDRANT_URL")
     if not qdrant_url:
-        logger.warning("Qdrant unavailable. Falling back to empty retrieval.")
+        logger.warning("RAG fallback reason: qdrant_url_missing")
         return []
 
     try:
+        logger.info("Retrieval query length=%s preview=%s", len(query), query[:200])
         vector = _embed_query(query)
         if not vector:
+            logger.warning("RAG fallback reason: empty_embedding")
             return []
 
         limit = top_k or _env_int("RAG_TOP_K", 5)
-        score_threshold = _env_float("RAG_SCORE_THRESHOLD", 0.75)
+        score_threshold = _env_optional_float("RAG_SCORE_THRESHOLD")
         collection = os.getenv("QDRANT_COLLECTION", "memory_box_contents")
         client = _qdrant_client()
 
@@ -89,17 +91,26 @@ async def retrieve(query: str, top_k: int | None = None) -> list[RetrievedDocume
                 with_payload=True,
             )
 
+        logger.info("Qdrant raw results: %s", len(points))
+        if score_threshold is None:
+            logger.info("RAG score threshold: disabled")
+        else:
+            logger.info("RAG score threshold: %s", score_threshold)
+
         return points_to_documents(points, score_threshold)
     except Exception as error:
         logger.warning(
-            "Qdrant unavailable. Falling back to empty retrieval. error=%s: %s",
+            "RAG fallback reason: qdrant_unavailable error=%s: %s",
             type(error).__name__,
             error,
         )
         return []
 
 
-def points_to_documents(points: list[Any], score_threshold: float) -> list[RetrievedDocument]:
+def points_to_documents(
+    points: list[Any],
+    score_threshold: float | None = None,
+) -> list[RetrievedDocument]:
     documents = []
     for point in points:
         try:
@@ -109,7 +120,7 @@ def points_to_documents(points: list[Any], score_threshold: float) -> list[Retri
                 continue
             if not payload:
                 continue
-            if score is not None and score < score_threshold:
+            if score_threshold is not None and score is not None and score < score_threshold:
                 continue
             documents.append(RetrievedDocument(payload=payload, score=score))
         except Exception as error:
