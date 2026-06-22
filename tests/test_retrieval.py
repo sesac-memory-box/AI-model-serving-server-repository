@@ -83,3 +83,14 @@ def test_points_to_documents_filters_results_below_score_threshold():
 
     assert len(documents) == 1
     assert documents[0].payload["content"] == "높은 점수 자료"
+
+
+def test_points_to_documents_keeps_score_066_without_score_threshold():
+    documents = points_to_documents(
+        [
+            SimpleNamespace(payload={"content": "남대문 시장 자료"}, score=0.66),
+        ]
+    )
+
+    assert len(documents) == 1
+    assert documents[0].payload["content"] == "남대문 시장 자료"

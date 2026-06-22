@@ -87,3 +87,21 @@ def test_retrieve_skips_payload_parsing_failures(monkeypatch):
 
     assert len(documents) == 1
     assert documents[0].payload["content"] == "정상 자료"
+
+
+def test_retrieve_keeps_score_066_when_score_threshold_is_unset(monkeypatch):
+    class LowScoreClient:
+        async def query_points(self, **kwargs):
+            return SimpleNamespace(
+                points=[
+                    SimpleNamespace(payload={"content": "남대문 시장 자료"}, score=0.66),
+                ]
+            )
+
+    _patch_retrieval_dependencies(monkeypatch, LowScoreClient())
+    monkeypatch.delenv("RAG_SCORE_THRESHOLD", raising=False)
+
+    documents = asyncio.run(retrieval.retrieve("남대문 시장"))
+
+    assert len(documents) == 1
+    assert documents[0].payload["content"] == "남대문 시장 자료"
